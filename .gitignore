@@ -1,0 +1,24 @@
+# Virtual Environment
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
+
+# Dados temporários
+temp/
+logs/
+
+# Arquivos gerados
+output/*.parquet
+output/*.csv
+
+# bases
+bases/*
+
+# Credenciais
+.env
