@@ -1,6 +1,13 @@
+import logging
 from pathlib import Path
+from zipfile import BadZipFile
 
+from openpyxl.utils.exceptions import InvalidFileException
 import pandas as pd
+from pyarrow.lib import ArrowException
+
+
+logger = logging.getLogger(__name__)
 
 
 class CleanCases:
@@ -41,12 +48,25 @@ class CleanCases:
 
     def __init__(self, data_dict: dict | None = None, base_dir: Path | str | None = None):
         self.base_dir = Path(base_dir) if base_dir is not None else Path(__file__).resolve().parent.parent
-        self.input_path = self.base_dir / "bases" / "Cases_sem_limpar.xlsx"
+        self.input_path = self.base_dir / "bases" / "Cases_sem_limpar.parquet"
         self.output_path = self.base_dir / "bases" / "Cases_limpos.parquet"
         self.data_dict = data_dict if data_dict is not None else {}
 
         if "Cases sem limpar" not in self.data_dict:
-            self.data_dict["Cases sem limpar"] = pd.read_excel(self.input_path)
+            legacy_input_path = self.input_path.with_suffix(".xlsx")
+            try:
+                if self.input_path.is_file():
+                    logger.info("Carregando base de entrada: %s", self.input_path)
+                    self.data_dict["Cases sem limpar"] = pd.read_parquet(self.input_path)
+                elif legacy_input_path.is_file():
+                    logger.warning("Migrando base legada %s para Parquet", legacy_input_path)
+                    self.data_dict["Cases sem limpar"] = pd.read_excel(legacy_input_path)
+                    self.data_dict["Cases sem limpar"].to_parquet(self.input_path, index=False)
+                else:
+                    self.data_dict["Cases sem limpar"] = pd.read_parquet(self.input_path)
+            except (ArrowException, BadZipFile, ImportError, InvalidFileException, OSError, ValueError):
+                logger.exception("Falha ao carregar a base de entrada Cases")
+                raise
 
     def _format_types(self, cases: pd.DataFrame) -> pd.DataFrame:
         missing_columns = [column for column in self.REQUIRED_COLUMNS if column not in cases.columns]
@@ -101,13 +121,18 @@ class CleanCases:
 
     def clean(self) -> pd.DataFrame:
         """Keep the latest rows for each report reference and save the cleaned dataset."""
-        cases = self._format_types(self.data_dict["Cases sem limpar"])
-        group_cases = cases.groupby("report_reference", as_index=False)["__insert_utc_ts"].max()
-        cleaned = cases.merge(group_cases, on=["report_reference", "__insert_utc_ts"], how="inner")
-        cleaned["Item"] = cleaned.groupby("report_reference", sort=False).cumcount() + 1
-        cleaned = cleaned.set_index(["report_reference", "Item"])
+        try:
+            cases = self._format_types(self.data_dict["Cases sem limpar"])
+            group_cases = cases.groupby("report_reference", as_index=False)["__insert_utc_ts"].max()
+            cleaned = cases.merge(group_cases, on=["report_reference", "__insert_utc_ts"], how="inner")
+            cleaned["Item"] = cleaned.groupby("report_reference", sort=False).cumcount() + 1
+            cleaned = cleaned.set_index(["report_reference", "Item"])
 
-        self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        cleaned.to_parquet(self.output_path)
-        self.data_dict["Cases limpos"] = cleaned
-        return cleaned
+            self.output_path.parent.mkdir(parents=True, exist_ok=True)
+            cleaned.to_parquet(self.output_path)
+            self.data_dict["Cases limpos"] = cleaned
+            logger.info("Base limpa salva em %s (%s linhas)", self.output_path, len(cleaned))
+            return cleaned
+        except (ArrowException, KeyError, OSError, TypeError, ValueError):
+            logger.exception("Falha ao limpar e salvar a base Cases")
+            raise

@@ -63,7 +63,7 @@ Classe responsável por limpar a base de entrada "Cases", que será guardada den
     - can_be_approved: : Type str (variavel categorica)
     - __insert_utc_ts: Type datetime;
     - tope_actual: Type float
-- Inicialmente temos a base sem limpar no arquivo Cases_sem_limpar.xlsx dentro da pasta "bases". e será asignado o "self.data_dict ['Cases sem limpar']" igual ao DataFrame destes dados
+- Inicialmente temos a base sem limpar no arquivo Cases_sem_limpar.parquet dentro da pasta "bases". e será asignado o "self.data_dict ['Cases sem limpar']" igual ao DataFrame destes dados
 - Apos a limpeza sera guardada a base cases no arquivo case_cleaned dentro do arquivo Cases_limpos.parquet dentro da pasta "bases" e será asignado o "self.data_dict ['Cases limpos']" igual ao DataFrame destes dados
 
 ---
@@ -81,7 +81,6 @@ Classe responsável por limpar a base de entrada "Cases", que será guardada den
 ---
 
 ### Interface Web Streamlit
- 
 
 O projeto deve possuir uma interface web desenvolvida com Streamlit.
  
@@ -91,7 +90,7 @@ Arquivo principal:
 
 Objetivo:
 
-- Upload a base "Cases sem limpar" e guardar em 'Cases_sem_limpar.xlsx' dentro da pasta 'bases'
+- Upload a base "Cases sem limpar" e guardar em 'Cases_sem_limpar.parquet' dentro da pasta 'bases'
 - Executar a limpeza dos dados de 'Cases sem limpar' para obter a base 'Cases limpos'. Mara isto ussa uma estancia da classe Analisis en analisis.py
 - Mostrar as bases
 - As bases estarão guardadas dentro de uma variavel dict 'data_dict', exemplo 'data_dict [Cases sem limpar]' de forma similar a Class CleanCases
@@ -103,7 +102,7 @@ Fluxo:
 4. As bases são exibidas separando estas em taps. Cada tap coresponde a base contida no data_dict e o nome corresponde a seu debido key em data_dict
 5. Sempre mostra as bases existentes na pasta 'bases'. Assim podemos visualisar o que já foi procesado previamente, ignorando "Cases sem limpar"
 6. O usuário tem a possibilidade de baixar os resultados em formato excel, en donde cada aba conten uma dada tabela da base, ignorando a base 'Cases sem limpar'.
-7. O usuário terá a posibilidade de filtrar os dados por 'report_reference', 'can_be_approved',  '__insert_utc_is' e 'rules_approval'
+7. O usuário terá a posibilidade de filtrar os dados por 'report_reference' e 'can_be_approved'
 ---
 
 ### Arquivo Mobile_Aprovation.bat
