@@ -20,20 +20,24 @@ Ao modificar arquivos:
 
 ## Regras de formatação
 
-- Limitar cada linha de código a no máximo 200 caracteres.
-- Manter chamadas e definições de funções, métodos e construtores em uma única linha quando o comprimento total for menor ou igual a 200 caracteres.
-- Não quebrar parâmetros em múltiplas linhas se a chamada inteira couber em até 200 caracteres.
-- Não quebrar parâmetros em múltiplas linhas desnecessariamente.
-- Só quebrar parâmetros em múltiplas linhas quando a chamada exceder 200 caracteres.
-- Aplicar a mesma regra para:
-  - funções
-  - métodos
-  - classes (construtores)
-  - dicionários
-  - listas
-- Quando chamar o definir uma função o método deixar um espaçõ entre o nome da função e os parênteses.
-- Quando definir variaveis ou parametros ou assignar valores, deixa espaços entre o nome da variável, o sinal de igual e o valor.
-- Quando definir ou assignar o valor de um termo de uma variavei númeravel, deixar um espaçõ entre o nóme da variavel e os colchetes.
+Importante: Sempre seguir estas regras!
+
+    - Limitar cada linha de código a no máximo 200 caracteres.
+    - Manter chamadas e definições de funções, métodos e construtores em uma única linha quando o comprimento total for menor ou igual a 200 caracteres.
+    - Não quebrar parâmetros em múltiplas linhas se a chamada inteira couber em até 200 caracteres.
+    - Não quebrar parâmetros em múltiplas linhas desnecessariamente.
+    - Só quebrar parâmetros em múltiplas linhas quando a chamada exceder 200 caracteres.
+    - Aplicar a mesma regra para:
+    - funções
+    - métodos
+    - classes (construtores)
+    - dicionários
+    - listas
+    - Quando chamar o definir uma função o método deixar um espaçõ entre o nome da função e os parênteses.
+    - Quando definir variaveis ou parametros ou parametros de funções ou assignar valores, deixa espaços entre o nome da variável, o sinal de igual e o valor.
+    - Quando comparar variaveis ou parametros de funções, deixa espaços entre o nome da variável, o sinal ("<", "<=", ">", "%", etc) e o valor.    
+    - Quando definir ou assignar o valor de um termo de uma variavei númeravel, deixar um espaçõ entre o nóme da variavel e os colchetes.
+    - Coloca comentarios explicando cada função o método
 
 ---
 
@@ -71,14 +75,44 @@ Classe responsável por limpar a base de entrada "Cases", que será guardada den
 #### Limpeza dos dados
     - Carregamos os dados da base "self.data_dict ['Cases sem limpar']"
     - Formatamos os tipos de dados de cada coluna
-    - Tomamos os dados de "self.data_dict ['Cases sem limpar']"
+    - Determinamos a data maxima em __insert_utc_ts, filtramos as linhas con valor em __insert_utc_ts maior que a data maxima menos um día.
     - Hacemos um agrupamento dos valores das columnas report_reference e __insert_utc_ts, agrupando por report_ference e com aggr function "max"; não indexar o agrupamento; salvamos na variavel group_cases o agrupamento.
     - Redefinimo a base "Cases limpos" filtrando só as linhas de "Cases sem limpar" que estão contidas dentro da tabela group_cases
     - Cria uma columna "Item" que númera linha por valor na columna "report_reference". Exemplo para report_reference = 1261-171921 os valores de Item são 1, 2, 3,...
     - Agrupamos usando multiindes, usando as columnas "report_frerence" e 'Item'.
     - Guardamos a base 'Cases limpos' com formato parquet dentro do arquivo 'Cases_limpos.parquet' dentro da pasta 'bases'
 
+--
+
+#### Separamos os casos a ser aprovados
+
+    - Separar casos a aprovar de kilometragem
+        - Se can_be_approved = "True" e aprove_km = True asignamos o valores da columna "approval_category" igual a "Kilometer" na base "Cases limpos".
+
+    - Separar os casos que são Guarderia e que podemos aprovar
+        - Se can_be_approved = "True" e aprove_guarderia = True asignamos o valores da columna "approval_category" igual a "Daycare" na base "Cases limpos".
+
+    - Separar os casos que são aluguel e que podemos aprovar
+        -Se can_be_approved = "True" e aprove_housing = True asignamos o valores da columna "approval_category" igual a "Housing" na base "Cases limpos".
+
 ---
+
+### Ajustar as quotas de Housing
+    - Ajustar os valores de "gross_amount_cc" para os casos em que "approval_category" e igual a "Daycare"
+        - Para cada "report_reference" calculamos a suma dos valores na columna "gross_amount_cc" e o maximo da columna "tope_actual"
+            - Se a soma de "gross_amount_cc" é maior que o maximo de "tope_actual":
+                - Assignamos "gross_amount_cc" de cada intem  igual a (soma de "gross_amount_cc") / (número de items)
+                - Criamos a columna "reset_gross_amount" e marcamos com True nestes casos
+
+---
+
+### Class Analisis
+
+Objetivo:
+    - Carregar as bases
+    - Solicitar a criação da base 'Cases limpos' usando a a classe CleanCases
+
+
 
 ### Interface Web Streamlit
 
