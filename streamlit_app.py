@@ -129,6 +129,8 @@ def main () -> None:
     ROW = {}
     # Crear fila para alocar os botões
     ROW ["Buttons"] = st.columns (5, vertical_alignment = "bottom")
+    # Fila de status
+    ROW ["Status"] = st.columns (3, vertical_alignment = "bottom", width = "stretch")
 
     uploaded_file = st.file_uploader ("Selecione a base Cases sem limpar", type=["xlsx", "parquet"],
                                     help="Envie um arquivo Excel (.xlsx) ou Parquet (.parquet) contendo a base Cases sem limpar.")
@@ -172,10 +174,12 @@ def main () -> None:
                 input_cases = pd.read_parquet (input_path)
                 analysis = Analisis (data_dict={"Cases sem limpar": input_cases}, base_dir=BASE_DIR)
                 with st.spinner ("Limpando os dados..."):
-                    cleaned_cases = analysis.create_cases_cleaned ()
+                    cleaned_cases = analysis.do_analisis ()
+                    #cleaned_cases = analysis.create_cases_cleaned ()
                 _read_base_file.clear ()
                 data_dict ["Cases limpos"] = cleaned_cases
-                st.success ("A base Cases_limpos.parquet foi atualizada.")
+                with ROW ["Status"] [1]:
+                    st.success ("A base Cases_limpos.parquet foi atualizada.")
                 logger.info ("Limpeza concluída: %s linhas salvas em Cases_limpos.parquet", len (data_dict ["Cases limpos"]))
             except (ArrowException, ImportError, OSError, TypeError, ValueError) as error:
                 st.error (f"Não foi possível limpar a base: {error}")

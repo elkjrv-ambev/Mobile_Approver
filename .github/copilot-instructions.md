@@ -41,7 +41,7 @@ Importante: Sempre seguir estas regras!
 
 ---
 
-### Class CleanCases
+## Class CleanCases
 
 Classe responsável por limpar a base de entrada "Cases", que será guardada dentro de uma variavel type dict da forma "self.data_dict ["Cases"]":
 
@@ -72,7 +72,7 @@ Classe responsável por limpar a base de entrada "Cases", que será guardada den
 
 ---
 
-#### Limpeza dos dados
+### Limpeza dos dados
     - Carregamos os dados da base "self.data_dict ['Cases sem limpar']"
     - Formatamos os tipos de dados de cada coluna
     - Determinamos a data maxima em __insert_utc_ts, filtramos as linhas con valor em __insert_utc_ts maior que a data maxima menos um día.
@@ -82,23 +82,36 @@ Classe responsável por limpar a base de entrada "Cases", que será guardada den
     - Agrupamos usando multiindes, usando as columnas "report_frerence" e 'Item'.
     - Guardamos a base 'Cases limpos' com formato parquet dentro do arquivo 'Cases_limpos.parquet' dentro da pasta 'bases'
 
---
+---
 
-#### Separamos os casos a ser aprovados
+## Class Analisis
 
-    - Separar casos a aprovar de kilometragem
+Objetivo:
+    - Carregar as bases
+    - Solicitar a criação da base 'Cases limpos' usando a a classe CleanCases
+    - Classificar o tipo de aprobação
+    - Para os casos con tipo de aprobação "Housing" devemos verificar as quotas e se necesario ajustar los valores a pagar 
+
+---
+
+### Separamos os casos a ser aprovados
+
+    - Casos a aprobar de **Kilometragem**
         - Se can_be_approved = "True" e aprove_km = True asignamos o valores da columna "approval_category" igual a "Kilometer" na base "Cases limpos".
 
-    - Separar os casos que são Guarderia e que podemos aprovar
+    - Casos a aprobar de **Daycare**
         - Se can_be_approved = "True" e aprove_guarderia = True asignamos o valores da columna "approval_category" igual a "Daycare" na base "Cases limpos".
 
-    - Separar os casos que são aluguel e que podemos aprovar
+    - Casos a aprobar de **Housing**
         -Se can_be_approved = "True" e aprove_housing = True asignamos o valores da columna "approval_category" igual a "Housing" na base "Cases limpos".
+
+    - Casos a aprobar de **Other**
+        -Se can_be_approved = "True" e aprove_housing, aprove_guarderia e aprove_km são falsos "approval_category" igual a "Other" na base "Cases limpos".
 
 ---
 
 ### Ajustar as quotas de Housing
-    - Ajustar os valores de "gross_amount_cc" para os casos em que "approval_category" e igual a "Daycare"
+    - Ajustar os valores de "gross_amount_cc" para os casos em que "approval_category" e igual a "Housing"
         - Para cada "report_reference" calculamos a suma dos valores na columna "gross_amount_cc" e o maximo da columna "tope_actual"
             - Se a soma de "gross_amount_cc" é maior que o maximo de "tope_actual":
                 - Assignamos "gross_amount_cc" de cada intem  igual a (soma de "gross_amount_cc") / (número de items)
@@ -106,15 +119,7 @@ Classe responsável por limpar a base de entrada "Cases", que será guardada den
 
 ---
 
-### Class Analisis
-
-Objetivo:
-    - Carregar as bases
-    - Solicitar a criação da base 'Cases limpos' usando a a classe CleanCases
-
-
-
-### Interface Web Streamlit
+## Interface Web Streamlit
 
 O projeto deve possuir uma interface web desenvolvida com Streamlit.
  
@@ -139,7 +144,7 @@ Fluxo:
 7. O usuário terá a posibilidade de filtrar os dados por 'report_reference' e 'can_be_approved'
 ---
 
-### Arquivo Mobile_Aprovation.bat
+## Arquivo Mobile_Aprovation.bat
 
 Cria um arquivo de lotes 'Mobile_Aprovation.bat".
 
