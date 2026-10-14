@@ -31,19 +31,23 @@ class Analisis:
         new_data = self.data_dict ["Cases limpos"]
 
         # Casos de kilometragem
-        filter_eval = (new_data ["can_be_approved"] == "True") & (new_data ["aprove_km"] == True)
+        filter_eval = (new_data ["can_be_approved"] == "True") & (new_data ["aprove_km"])
         new_data.loc [filter_eval, ["approval_category"]] = "Kilometer"
 
         # Casos de Housing
-        filter_eval = (new_data ["can_be_approved"] == "True") & (new_data ["aprove_housing"] == True)
+        filter_eval = (new_data ["can_be_approved"] == "True") & (new_data ["aprove_housing"])
         new_data.loc [filter_eval, ["approval_category"]] = "Housing"
 
         # Casos de Housing
-        filter_eval = (new_data ["can_be_approved"] == "True") & (new_data ["aprove_guarderia"] == True)
+        filter_eval = (new_data ["can_be_approved"] == "True") & (new_data ["aprove_guarderia"])
         new_data.loc [filter_eval, ["approval_category"]] = "Daycare"
 
         new_data.to_parquet (self.cleaner.output_path)
         self.data_dict ["Cases limpos"] = new_data
+
+        # Otros casos
+        filter_eval = (new_data ["can_be_approved"] == "True") & (~ new_data ["aprove_km"]) & (~ new_data ["aprove_housing"]) & (~ new_data ["aprove_guarderia"])
+        new_data.loc [filter_eval, ["approval_category"]] = "Other"
 
         return new_data
         #logger.info ("Base limpa salva em %s (%s linhas)", self.output_path, len (cleaned))

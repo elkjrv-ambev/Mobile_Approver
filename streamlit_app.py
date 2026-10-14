@@ -22,8 +22,6 @@ logger = logging.getLogger (__name__)
 @st.cache_data
 def _read_base_file (file_path: str, modified_ns: int, file_size: int) -> pd.DataFrame:
     path = Path (file_path)
-    if path.suffix.lower () == ".xlsx":
-        return pd.read_excel (path)
     if path.suffix.lower () == ".parquet":
         return pd.read_parquet (path)
     raise ValueError (f"Formato de base não suportado: {path.suffix}")
@@ -48,7 +46,9 @@ def _load_data_dict () -> tuple[dict[str, pd.DataFrame], dict[str, str], list[st
                          key=lambda path: path.name.casefold ()) if BASES_DIR.is_dir () else []
 
     for path in base_files:
-        if path.suffix.lower () not in {".xlsx", ".parquet"}:
+        if path.stem.casefold () == "cases_sem_limpar":
+            continue
+        if path.suffix.lower () != ".parquet":
             unsupported_files.append (path.name)
             logger.warning ("Arquivo ignorado por formato não suportado: %s", path.name)
             continue
@@ -59,9 +59,7 @@ def _load_data_dict () -> tuple[dict[str, pd.DataFrame], dict[str, str], list[st
             logger.info ("Base carregada: %s (%s linhas)", path.name, len (data_dict [key]))
         except (
             ArrowException,
-            BadZipFile,
             ImportError,
-            InvalidFileException,
             OSError,
             ValueError,
             pd.errors.ParserError,
@@ -101,7 +99,7 @@ def _case_values (cases: pd.DataFrame, column: str) -> pd.Series | None:
     return None
 
 
-def _filter_cases (cases: pd.DataFrame, report_references: list[str], approval_values: list[str]) -> pd.DataFrame:
+def _filter_cases (cases: pd.DataFrame, report_references: list[str], approval_values: list[str], approval_category: list[str]) -> pd.DataFrame:
     """Filtra registros sem alterar os níveis do índice original."""
     filtered_cases = cases.copy ()
     if report_references:
@@ -114,6 +112,11 @@ def _filter_cases (cases: pd.DataFrame, report_references: list[str], approval_v
         if approval_values_in_cases is not None:
             approval_mask = approval_values_in_cases.astype ("string").isin (approval_values)
             filtered_cases = filtered_cases.loc [approval_mask.to_numpy ()]
+    if approval_category:
+        approval_category_in_cases = _case_values (filtered_cases, "approval_category")
+        if approval_category_in_cases is not None:
+            approval_mask = approval_category_in_cases.astype ("string").isin (approval_category)
+            filtered_cases = filtered_cases.loc [approval_mask.to_numpy ()]
 
     return filtered_cases
 
@@ -121,26 +124,34 @@ def _filter_cases (cases: pd.DataFrame, report_references: list[str], approval_v
 def main () -> None:
     st.set_page_config (page_title = "Mobile Approver", page_icon = "📊", layout = "wide")
     st.title ("Mobile Approver")
-    st.write ("Carregue um arquivo Excel ou Parquet, com os casos a tratar.")
+    st.write ("Carregue um arquivo Excel ou Parquet com os casos a tratar.")
+
+    ROW = {}
+    # Crear fila para alocar os botões
+    ROW ["Buttons"] = st.columns (5, vertical_alignment = "bottom")
 
     uploaded_file = st.file_uploader ("Selecione a base Cases sem limpar", type=["xlsx", "parquet"],
-                                      help="Envie um arquivo Excel (.xlsx) ou Parquet (.parquet) contendo a base Casos a tratar.")
+                                    help="Envie um arquivo Excel (.xlsx) ou Parquet (.parquet) contendo a base Cases sem limpar.")
     upload_error = None
     if uploaded_file is not None:
         uploaded_bytes = uploaded_file.getvalue ()
         upload_key = f"{uploaded_file.name}:{sha256 (uploaded_bytes).hexdigest ()}"
         if st.session_state.get ("upload_key") != upload_key:
             try:
+                file_suffix = Path (uploaded_file.name).suffix.lower ()
                 uploaded_stream = BytesIO (uploaded_bytes)
-                if Path (uploaded_file.name).suffix.lower () == ".parquet":
+                if file_suffix == ".parquet":
                     uploaded_cases = pd.read_parquet (uploaded_stream)
-                else:
+                elif file_suffix == ".xlsx":
                     uploaded_cases = pd.read_excel (uploaded_stream)
+                else:
+                    raise ValueError ("Envie somente arquivos Excel (.xlsx) ou Parquet (.parquet).")
                 BASES_DIR.mkdir (parents=True, exist_ok=True)
                 uploaded_cases.to_parquet (BASES_DIR / "Cases_sem_limpar.parquet", index=False)
                 st.session_state ["upload_key"] = upload_key
                 _read_base_file.clear ()
-                logger.info ("Arquivo enviado %s salvo como Cases_sem_limpar.parquet (%s linhas)", uploaded_file.name, len (uploaded_cases))
+                logger.info ("Arquivo enviado %s convertido e salvo como Cases_sem_limpar.parquet (%s linhas)",
+                            uploaded_file.name, len (uploaded_cases))
             except (ArrowException, BadZipFile, ImportError, InvalidFileException, OSError, ValueError) as error:
                 upload_error = f"Não foi possível ler ou salvar o arquivo enviado: {error}"
                 logger.exception ("Falha ao validar ou salvar o arquivo enviado")
@@ -154,20 +165,21 @@ def main () -> None:
     if unsupported_files:
         st.info (f"Arquivos em formato não suportado para visualização: {', '.join (unsupported_files)}")
 
-    input_cases = data_dict.get ("Cases sem limpar")
-
-    if input_cases is not None and st.button ("Limpar dados", type="primary"):
-        try:
-            analysis = Analisis (data_dict={"Cases sem limpar": input_cases}, base_dir=BASE_DIR)
-            with st.spinner ("Limpando os dados..."):
-                cleaned_cases = analysis.create_cases_cleaned ()
-            _read_base_file.clear ()
-            data_dict ["Cases limpos"] = cleaned_cases
-            st.success ("A base Cases_limpos.parquet foi atualizada.")
-            logger.info ("Limpeza concluída: %s linhas salvas em Cases_limpos.parquet", len (data_dict ["Cases limpos"]))
-        except (ImportError, OSError, TypeError, ValueError) as error:
-            st.error (f"Não foi possível limpar a base: {error}")
-            logger.exception ("Falha ao limpar a base Cases")
+    with ROW ["Buttons"] [0]:
+        if st.button ("Limpar dados", type="primary"):
+            try:
+                input_path = BASES_DIR / "Cases_sem_limpar.parquet"
+                input_cases = pd.read_parquet (input_path)
+                analysis = Analisis (data_dict={"Cases sem limpar": input_cases}, base_dir=BASE_DIR)
+                with st.spinner ("Limpando os dados..."):
+                    cleaned_cases = analysis.create_cases_cleaned ()
+                _read_base_file.clear ()
+                data_dict ["Cases limpos"] = cleaned_cases
+                st.success ("A base Cases_limpos.parquet foi atualizada.")
+                logger.info ("Limpeza concluída: %s linhas salvas em Cases_limpos.parquet", len (data_dict ["Cases limpos"]))
+            except (ArrowException, ImportError, OSError, TypeError, ValueError) as error:
+                st.error (f"Não foi possível limpar a base: {error}")
+                logger.exception ("Falha ao limpar a base Cases")
 
     display_data_dict = {
         key: cases for key, cases in data_dict.items ()
@@ -177,9 +189,10 @@ def main () -> None:
         st.info ("Nenhuma base processada encontrada na pasta bases. Envie a planilha e execute a limpeza.")
         return
 
-    st.download_button ("Baixar bases processadas em Excel", data=_create_excel (display_data_dict),
-                        file_name="Bases_processadas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        type="primary", key="download_processed_bases")
+    with ROW ["Buttons"] [1]:
+        st.download_button ("Baixar bases processadas em Excel", data=_create_excel (display_data_dict),
+                            file_name="Bases_processadas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            type="primary", key="download_processed_bases")
 
     base_items = list (display_data_dict.items ())
     base_tabs = st.tabs ([key for key, _ in base_items])
@@ -189,22 +202,29 @@ def main () -> None:
             display_cases = cases.copy ()
             report_values = _case_values (display_cases, "report_reference")
             approval_values = _case_values (display_cases, "can_be_approved")
+            approval_category = _case_values (display_cases, "approval_category")
             if report_values is not None and approval_values is not None:
                 report_options = sorted (report_values.dropna ().astype (str).unique ())
                 approval_options = sorted (approval_values.dropna ().astype (str).unique ())
-                report_filter, approval_filter = st.columns (2)
+                category_options = sorted (approval_category.dropna ().astype (str).unique ())
+                report_filter, approval_filter, category_filter = st.columns (3)
                 with report_filter:
                     selected_reports = st.multiselect ("Filtrar por report_reference", options=report_options, key=f"report_filter_{base_key}")
                 with approval_filter:
                     selected_approvals = st.multiselect ("Filtrar por can_be_approved", options=approval_options, key=f"approval_filter_{base_key}")
+                with category_filter:
+                    selected_category = st.multiselect ("Filtrar por approval_category", options=category_options, key=f"category_filter_{base_key}")
 
-                filtered_cases = _filter_cases (display_cases, selected_reports, selected_approvals)
+
+                filtered_cases = _filter_cases (display_cases, selected_reports, selected_approvals, selected_category)
                 st.metric ("Cases exibidos", f"{len (filtered_cases):,} de {len (display_cases):,}")
                 st.dataframe (filtered_cases, width="stretch", alt=f"Pré-visualização de {base_key}")
-                st.download_button ("Baixar Cases filtrados em Excel", data=_create_excel ({base_key: filtered_cases}),
-                                    file_name=f"{base_key.replace (' ', '_')}_filtrados.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    type="primary", key=f"download_{base_key}")
+                
+                with ROW ["Buttons"] [2]:
+                    st.download_button ("Baixar Cases filtrados em Excel", data=_create_excel ({base_key: filtered_cases}),
+                                        file_name=f"{base_key.replace (' ', '_')}_filtrados.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        type="primary", key=f"download_{base_key}")
             else:
                 st.dataframe (cases, width="stretch", alt=f"Pré-visualização de {base_key}")
 

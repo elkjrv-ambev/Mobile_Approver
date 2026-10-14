@@ -488,8 +488,6 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
         
         # Entra para ver os detalhes da solicitude
         self.click_over ({"Selector": "#ReportList > tbody > tr.trx > td:nth-child(4) > a"})
-        # ++++ Agregar para ver si tem items
-        #searchMsg
 
         # Vai no final da pagina
         self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -527,11 +525,6 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
         # Save in log file
         logging.info ("")
 
-        # +++++
-        # Salvar en el historico
-
-        # (Obcional) Se é o caso aprova e muda o Cotroller a closed e o Controller status como aprobado, caso contrario inora
-        # (Obcional) Depoís de avaliar todos os caso atualiza a base.
     """
 
 if __name__ == "__main__":
