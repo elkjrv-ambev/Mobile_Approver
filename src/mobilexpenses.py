@@ -12,6 +12,7 @@ Automatización Selenium con pandas
 import os
 import time
 import sys
+import re
 import pandas as pd
 import chardet
 from selenium.webdriver.chrome.options import Options
@@ -27,6 +28,7 @@ from datetime import datetime, timedelta
 from selenium import webdriver
 import pyarrow.parquet as pq
 import pyarrow as pa
+from pathlib import Path
 import logging
 #import re
 
@@ -35,6 +37,8 @@ SCRIPT_DIR = os.path.realpath(os.path.realpath(__file__))
 SCRIPT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 three_levels_back = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 sys.path.insert(0, three_levels_back)
+SCRIPT_DIR = Path (os.path.abspath(os.path.join(SCRIPT_DIR, "..")))
+BASES_DIR = SCRIPT_DIR / "bases"
 
 import src.webdriver_obj as wdo
 
@@ -50,15 +54,16 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
     def __init__ (self):
         self.name_ = "Mobilexpense"
         # Setup file
-        self.setup_path_file = os.path.join (SCRIPT_DIR,"Setup.xlsx")
+        self.setup_path_file = SCRIPT_DIR / "Setup.xlsx"
+        
         self.setup_df = pd.read_excel (self.setup_path_file, sheet_name = self.name_, index_col = "Parameter", engine="openpyxl")        
-        # self.url_begin = self.setup_df.loc ["Url begin"].Value
-        self.url_begin = "https://xp1.mobilexpense.com/Home/login"
+        self.url_begin = self.setup_df.loc ["Url begin"].Value
+        #self.url_begin = "https://xp1.mobilexpense.com/Home/login"
         
         # Setup webdriver
         params_funct = {"Webdriver": self.setup_path_file}
-        #self.zoom_level = self.setup_df.loc ["Zoom level"].Value
-        self.zoom_level = 50
+        self.zoom_level = self.setup_df.loc ["Zoom level"].Value
+        #self.zoom_level = 50
 
         #'Open cases mobilexpences'
         #aux_name = 'Open cases mobilexpences'
@@ -130,13 +135,12 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
         
         self.driver.maximize_window ()
 
-
     def load_data_parquet (self, params_dict):
-        print ("==> Carregando base ", params_dict ["Base"], " in path ",  self.file_path [params_dict ["Base"]])
-
-        if os.path.exists (self.file_path [params_dict ["Base"]]):
+        path_file = BASES_DIR / f"{params_dict ["Base"]}.parquet"
+        print ("==> Carregando base ", params_dict ["Base"], " in path ", path_file)
+        if os.path.exists (path_file):
             #self.data_df [params_dict ["Base"]] = pq.read_pandas (self.file_path [params_dict ["Base"]], columns = self.columns_used [params_dict ["Base"]]).to_pandas ()            
-            self.data_df [params_dict ["Base"]] = pd.read_parquet (self.file_path [params_dict ["Base"]])            
+            self.data_df [params_dict ["Base"]] = pd.read_parquet (path_file)            
             #self.data_df [params_dict ["Base"]] = self.data_df [self.columns_used [params_dict ["Base"]]]
         else:
             if len (self.index_list [params_dict ["Base"]]) > 0:
@@ -151,8 +155,10 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
         if "Inore index" in params_dict.keys ():
             preserve_index = params_dict ["Preserve index"]
 
+        path_file = BASES_DIR / f"{params_dict ["Base"]}.parquet"
+        print (f"save_to_parquet: Salvando base {params_dict ["Base"]} em {path_file}")
         table_parquet = pa.Table.from_pandas (self.data_df [params_dict ["Base"]], preserve_index = preserve_index)
-        pq.write_table (table_parquet, self.file_path [params_dict ["Base"]])
+        pq.write_table (table_parquet, path_file)
 
     def goto_page (self):
         # Abre o navegador
@@ -219,7 +225,7 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
             os.remove (path_file_n)
         os.rename (path_file, path_file_n)
         self.downloaded_file_name = new_file_name
-        
+
         # Save in parquet
         self.save_to_parquet ({"Base": "Open cases mobilexpences"})
         
@@ -255,12 +261,17 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
         aux_time = 0
         step_time = 0.1
         try:
-            elem = self.wait_element ({"Selector": "#loadingImageHolder", "Wait time": 2})
+            #elem = self.wait_element ({"Selector": "#loadingImageHolder", "Wait time": 1})
+            elem = self.wait_element ({"Selector": "#syncOverlay", "Wait time": 1})
         except:
             # Corrigue os casos quando faltou dar um enter
-            time.sleep (1)
             self.press_enter ({"Selector": "#Reference"})
-            elem = self.wait_element ({"Selector": "#loadingImageHolder", "Wait time": 2})
+            try:
+                #elem = self.wait_element ({"Selector": "#loadingImageHolder", "Wait time": 1})
+                elem = self.wait_element ({"Selector": "#syncOverlay", "Wait time": 1})
+            except:
+                pass
+            time.sleep (0.5)
 
         end_loaded = False
         while aux_time < 30:
@@ -271,6 +282,118 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
                 end_loaded = True
                 break
         return end_loaded
+
+
+    def approval_request (self, cases_df):
+        # Filtra da base os casos de kilometer
+        # Casos com os valores Open ou Scaned na columna Receipt Controller Status
+        #cases_df = self.filter_case_with_user_in_base ()
+ 
+        # Abre o site 
+        self.goto_page ()
+
+        # Avalia caso por caso
+        for i_ind, row_ind in cases_df.iterrows ():
+            self.evaluate_one_case ({"Report ref": row_ind ["ReportRef"], "ID user": row_ind ["LOGIN"]})
+
+    def evaluate_one_case (self, params_dict):
+        output_dict = {}
+        # Vai ao portal na seção expenses
+        self.goto_expenses ()
+
+        # Pego o código do Expense note.
+        expenses_note = params_dict ["Report ref"]
+        user_ref =  params_dict ["ID user"]
+
+        # Salva no log file as informações do report ref e do usuario
+        logging.info ("="*60)
+        logging.info ("ReportRef:\n%s", "\t" + expenses_note)
+        logging.info ("User ID:\n%s", "\t" + str (user_ref))
+        #filter_1 = self.data_df ["User request groups"] ["Legajo"] == user_ref
+        #logging.info ("User groups:\n%s", "\t" + self.data_df ["User request groups"].loc [filter_1, "Politica"])
+
+        # Coloca o valor de Report ref na caixa “Expense note” e faz click em Search
+        self.set_value ({"Selector": "#Reference", "Value": expenses_note})
+        time.sleep (0.5)
+        self.press_enter ({"Selector": "#Reference"})
+
+        # Entra para ver a informação do caso
+        # Espera carregar
+        self.wait_end_loading_image ()
+        
+        # Entra para ver os detalhes da solicitude
+        self.click_over ({"Selector": "#ReportList > tbody > tr.trx > td:nth-child(4) > a"})
+
+        # Vai no final da pagina
+        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        
+        # Ve os valores nos campos descriptivos
+        tabela_sol = self.wait_element ({"Selector": "#tblTransactionList"})
+
+        # Lista as linhas da tabela
+        lines_sol = tabela_sol.find_elements(By.TAG_NAME, "tr")
+
+
+        # Faze a avaliações de todos os requerimentos
+        # Lista os valores por columna ignorando as vazias
+        #list_request_evaluated = self.do_lines_avaliation ({"Request list": lines_sol, "ID user": user_ref})
+        list_request_evaluated = self.take_items_request ({"Request list": lines_sol, "ID user": user_ref})
+        #output_dict ["Approvable requirements"] = str (len (list_request_evaluated [list_request_evaluated ["Validation"]])) + "/" + str (len (list_request_evaluated))   
+        
+
+        # Save in log file
+        logging.info ("Items:\n%s", list_request_evaluated [["Request", "Validation"]].to_string())
+
+        # Ve si todos o items foram aceitos e aprova
+        # Se é o caso selecciona os items a aprovar e asigna as cutoas
+        #output_dict ["All requirements are acceptable"] = self.aprove_item ({"Request list evaluated": list_request_evaluated})
+        self.set_aprove_item ({"Request list evaluated": list_request_evaluated})
+
+        print (list_request_evaluated)
+        time.sleep (5)
+
+        ## Sair dos iframe para iniciar o proceso novamente
+        self.driver.switch_to.default_content()
+
+        # Save in log file
+        logging.info ("")
+
+    def take_items_request (self, params_dict):
+        # Lista os requerimentos ignorando os vazios
+        Cols_item = ["Request", "Validation", "Element Received", "Element Valid"]
+        request_list_evaluated = pd.DataFrame (columns= Cols_item)
+        logging.info ("+"*60)
+        for line_ind in params_dict ["Request list"]:
+            val_sol = line_ind.find_elements(By.TAG_NAME, "td")
+            if (len (val_sol) > 8):
+                aux_index = val_sol [2].text
+                request_list_evaluated.loc  [aux_index] = [re.sub (r"^\d* *\- *(.*)",r"\1",val_sol [6].text.split ("\n")[0]),
+                                                    False,
+                                                    val_sol [12],
+                                                    val_sol [13]
+                                                    ]
+                # Faze a avaliação
+                #request_list_evaluated.at  [aux_index, "Validation"] = self.evaluate_request ({"Request": request_list_evaluated.at  [aux_index, "Request"], "ID user": params_dict ["ID user"]})
+
+        # Save in log file
+        logging.info ("+"*60)
+
+        return request_list_evaluated
+
+
+    def set_aprove_item (self, params_dict):
+        ## Colocar If de avaliação
+        # Valida received
+        for ind_i, row_i in params_dict ["Request list evaluated"].iterrows ():
+            checkbox_sol = row_i ["Element Received"].find_elements (By.CSS_SELECTOR, "input[type='checkbox']")
+            if not checkbox_sol [0].is_selected():
+                checkbox_sol [0].click()
+            # Valida Aproval
+            checkbox_sol = row_i ["Element Valid"].find_elements (By.CSS_SELECTOR, "input[type='checkbox']")
+            if not checkbox_sol [0].is_selected():
+                checkbox_sol [0].click()
+        return True
+
 
     """
     # ++
@@ -291,21 +414,7 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
         self.save_to_parquet ({"Base": self.name_, "Preserve index": True})
     """
 
-    """
-    def approval_kilometer (self):
-        # Filtra da base os casos de kilometer
-        # Casos com os valores Open ou Scaned na columna Receipt Controller Status
-        #cases_df = self.filter_case_with_user_in_base ()
-        cases_df = pd.DataFrame ()
  
-        # Abre o site 
-        self.goto_page ()
-
-        # Avalia caso por caso
-        for i_ind, row_ind in cases_df.iterrows ():
-            self.evalouate_one_case ({"Report ref": row_ind ["ReportRef"], "ID user": row_ind ["LOGIN"]})
-    """
-
     """
     # ++
     def approvate_kilometer (self):

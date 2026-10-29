@@ -142,6 +142,9 @@ Fluxo:
 5. Sempre mostra as bases existentes na pasta 'bases'. Assim podemos visualisar o que já foi procesado previamente, ignorando "Cases sem limpar"
 6. O usuário tem a possibilidade de baixar os resultados em formato excel, en donde cada aba conten uma dada tabela da base, ignorando a base 'Cases sem limpar'.
 7. O usuário terá a posibilidade de filtrar os dados por 'report_reference' e 'can_be_approved'
+8. Temos um botão que ao clicar descarrega as informações do site Mobileexpenses, usando a classe mobileexpenses_obj definida dentro do arquivo mobileexpenses.py
+    - Cruza as informações dos "Cases limpos" com a base descarregada do site Mobileexpenses. Drop as linhas de 'Cases limpos' que não estejam na base descarregada. 
+
 ---
 
 ## Arquivo Mobile_Aprovation.bat

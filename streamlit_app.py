@@ -10,6 +10,7 @@ from pyarrow.lib import ArrowException
 import streamlit as st
 
 from src.analisis import Analisis
+from src.mobilexpenses import mobilexpense_obj
 
 
 BASE_DIR = Path (__file__).resolve ().parent
@@ -129,7 +130,7 @@ def main () -> None:
     ROW = {}
     
     # Crear fila para alocar os botões
-    ROW ["Buttons"] = st.columns (5, vertical_alignment = "center")
+    ROW ["Buttons"] = st.columns (6, vertical_alignment = "center")
     # Fila de status
     ROW ["Status"] = st.columns (1, vertical_alignment = "bottom", width = "stretch")
 
@@ -179,14 +180,12 @@ def main () -> None:
         espaco_status.info (f"Arquivos em formato não suportado para visualização: {', '.join (unsupported_files)}")
 
     with ROW ["Buttons"] [1]:
-        if st.button ("Limpar dados", type="primary"):
+        if st.button ("Fazer analisis", type="primary"):
             try:
-                input_path = BASES_DIR / "Cases_sem_limpar.parquet"
-                input_cases = pd.read_parquet (input_path)
-                analysis = Analisis (data_dict={"Cases sem limpar": input_cases}, base_dir=BASE_DIR)
+                analysis = Analisis ()
+                cleaned_cases = pd.DataFrame ()
                 with st.spinner ("Limpando os dados..."):
                     cleaned_cases = analysis.do_analisis ()
-                    #cleaned_cases = analysis.create_cases_cleaned ()
                 _read_base_file.clear ()
                 data_dict ["Cases limpos"] = cleaned_cases
                 espaco_status.success ("A base Cases_limpos.parquet foi atualizada.")
@@ -194,11 +193,14 @@ def main () -> None:
             except (ArrowException, ImportError, OSError, TypeError, ValueError) as error:
                 espaco_status.error (f"Não foi possível limpar a base: {error}")
                 logger.exception ("Falha ao limpar a base Cases")
+            else:
+                _read_base_file.clear ()
+                st.rerun ()
 
-    display_data_dict = {
-        key: cases for key, cases in data_dict.items ()
-        if key.casefold () != "cases sem limpar" and not key.casefold ().startswith ("cases sem limpar (")
-    }
+
+    display_data_dict = {key: cases for key, cases in data_dict.items ()
+                         if key.casefold () != "cases sem limpar" and not key.casefold ().startswith ("cases sem limpar (")}
+
     if not display_data_dict:
         espaco_status.info ("Nenhuma base processada encontrada na pasta bases. Envie a planilha e execute a limpeza.")
         return
@@ -240,8 +242,51 @@ def main () -> None:
                                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                         type="primary", key=f"download_{base_key}")
             else:
+                st.metric ("Cases exibidos", f"{len (cases)}")
                 st.dataframe (cases, width="stretch", alt=f"Pré-visualização de {base_key}")
 
+    with ROW ["Buttons"] [4]:
+        if st.button ("Dascargar base Mobileexpences", type="primary"):
+            try:
+                msg = "Descarregando dados do portal Mobileexpence"
+                logger.info (msg)
+                espaco_status.info (msg) 
+                mobex = mobilexpense_obj ()
+                mobex.dowload_cases ()
+            except (ArrowException, BadZipFile, ImportError, InvalidFileException, OSError, ValueError) as error:
+                upload_error = f"Não foi posivei descarregar os dados do mobileexpenses"
+                logger.exception ("Falha ao validar ou salvar o arquivo enviado")
+            else:
+                logger.info ("Dados descarregados do Mobileexpenses")
+                espaco_status.info (f"Dados descarregados do Mobileexpenses")
 
+    with ROW ["Buttons"] [5]:
+        if st.button ("Aprovar", type="primary"):
+            mobex = mobilexpense_obj ()
+            mobex.goto_page ()
+            # Filtramos os casos a aprovar
+            filter_1 = data_dict ["Cases limpos"] ["can_be_approved"] == "True"
+            filter_1 = filter_1 & (data_dict ["Cases limpos"] ["approval_category"].isin (["Other", "Kilometer"]))
+            filter_1 = filter_1 & (data_dict ["Cases limpos"] ["Is open in mobileexpence"])
+            cases_to_apprv = data_dict ["Cases limpos"] [filter_1]
+            # Aprovamos item por item
+            for i_ind, row_ind in cases_to_apprv.iterrows ():
+                try:
+                    msg = "Descarregando dados do portal Mobileexpence"
+                    logger.info (msg)
+                    espaco_status.info (msg) 
+
+                    mobex.evaluate_one_case ({"Report ref": i_ind [0], "ID user": row_ind ["employee_id"]})
+
+                    #data_dict ["Cases limpos"].loc [i_ind, "Is open in mobileexpence"] = False
+                except (ArrowException, BadZipFile, ImportError, InvalidFileException, OSError, ValueError) as error:
+                    upload_error = f"Não foi possivel aprovar request"
+                    logger.exception (upload_error)
+                    break
+                else:
+                    msg = "O request foi aprovado"
+                    logger.info (msg)
+                    espaco_status.info (msg)
+        
 if __name__ == "__main__":
     main ()

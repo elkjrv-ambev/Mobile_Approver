@@ -1,18 +1,26 @@
 from pathlib import Path
-
 import pandas as pd
-
 from src.clean_cases import CleanCases
-
+import pyarrow.parquet as pq
+import pyarrow as pa
+import os
+import sys
 import numpy as np
 
+# Get the directory of the current script
+SCRIPT_DIR = os.path.realpath(os.path.realpath(__file__))
+SCRIPT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+three_levels_back = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
+sys.path.insert(0, three_levels_back)
+SCRIPT_DIR = Path (os.path.abspath(os.path.join(SCRIPT_DIR, "..")))
+BASES_DIR = SCRIPT_DIR / "bases"
 
 class Analisis:
     """Coordinate the Cases analysis and cleaning process."""
 
-    def __init__ (self, data_dict: dict | None = None, base_dir: Path | str | None = None):
+    def __init__ (self, data_dict: dict | None = None):
         """Inicializa o processo de análise com os dados e a pasta base informados."""
-        self.cleaner = CleanCases (data_dict=data_dict, base_dir=base_dir)
+        self.cleaner = CleanCases (data_dict = data_dict, base_dir = BASES_DIR)
         self.data_dict = self.cleaner.data_dict
 
     def do_analisis (self) -> pd.DataFrame:
@@ -25,13 +33,60 @@ class Analisis:
 
         # Reset quotas for housing
         self.fit_quotas ()
+
+        # Compara com a base Mobileexpences
+        self.compare_cases_mobileexpences ()
         
         return self.data_dict ["Cases limpos"]
+
+    def load_data_parquet (self, params_dict):
+        path_file = BASES_DIR / f"{params_dict ["Base"]}.parquet"
+        print ("==> Carregando base ", params_dict ["Base"], " in path ", path_file)
+        if os.path.exists (path_file):
+            self.data_dict [params_dict ["Base"]] = pd.read_parquet (path_file)            
+        else:
+            if len (self.index_list [params_dict ["Base"]]) > 0:
+                self.data_dict [params_dict ["Base"]] = pd.DataFrame (columns = self.columns_used [params_dict ["Base"]] + self.index_list [params_dict ["Base"]])
+                self.data_dict [params_dict ["Base"]].set_index (self.index_list [params_dict ["Base"]], inplace = True)
+            else:
+                self.data_dict [params_dict ["Base"]] = pd.DataFrame (columns = self.columns_used [params_dict ["Base"]] + self.index_list [params_dict ["Base"]])
+
+    def compare_cases_mobileexpences (self):
+        # Carrega bases necesarias
+        self.load_data_parquet ({"Base": "Open cases mobilexpences"})
+        self.load_data_parquet ({"Base": "Cases_limpos"})
+        mobileexpences = self.data_dict ["Open cases mobilexpences"]
+        cases_limpos = self.data_dict ["Cases_limpos"]
+
+        # Comparamos as bases e deixamos só os casos a aprobar
+        filter_1 = cases_limpos.index.get_level_values ("report_reference").isin (mobileexpences ["ReportRef"])
+        cases_limpos ["Is open in mobileexpence"] = False
+        cases_limpos.loc [filter_1, "Is open in mobileexpence"] = True
+
+        # Guardamos a base atualizada
+        self.data_dict ["Cases_limpos"] = cases_limpos
+        self.save_to_parquet ({"Base": "Cases_limpos"})
+        return cases_limpos
+
+    def save_to_parquet (self, params_dict):
+        preserve_index = True
+        if "Inore index" in params_dict.keys ():
+            preserve_index = params_dict ["Preserve index"]
+
+        path_file = BASES_DIR / f"{params_dict ["Base"]}.parquet"
+        print (f"save_to_parquet: Salvando base {params_dict ["Base"]} em {path_file}")
+        table_parquet = pa.Table.from_pandas (self.data_dict [params_dict ["Base"]], preserve_index = preserve_index)
+        pq.write_table (table_parquet, path_file)
 
 
     def create_cases_cleaned (self) -> pd.DataFrame:
         """Executa a limpeza e retorna a base Cases limpos persistida."""
         # Clean data
+        self.load_data_parquet ({"Base": "Cases_sem_limpar"})
+        input_cases = self.data_dict ["Cases_sem_limpar"]
+        data_dict = {"Cases sem limpar": input_cases}
+        self.cleaner = CleanCases (data_dict = data_dict, base_dir = BASES_DIR)
+
         new_cases = self.cleaner.clean ()
 
         self.data_dict ["Cases limpos"] = new_cases

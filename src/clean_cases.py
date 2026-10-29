@@ -48,8 +48,8 @@ class CleanCases:
     def __init__ (self, data_dict: dict | None = None, base_dir: Path | str | None = None):
         """Configura os caminhos das bases e carrega a entrada quando necessário."""
         self.base_dir = Path (base_dir) if base_dir is not None else Path (__file__).resolve ().parent.parent
-        self.input_path = self.base_dir / "bases" / "Cases_sem_limpar.parquet"
-        self.output_path = self.base_dir / "bases" / "Cases_limpos.parquet"
+        self.input_path = self.base_dir / "Cases_sem_limpar.parquet"
+        self.output_path = self.base_dir / "Cases_limpos.parquet"
         self.data_dict = data_dict if data_dict is not None else {}
 
         if "Cases sem limpar" not in self.data_dict:
