@@ -21,23 +21,20 @@ class Analisis:
         self.create_cases_cleaned ()
 
         # Set approval category
-        new_data = self.set_approval_category ()
+        self.set_approval_category ()
 
         # Reset quotas for housing
         self.fit_quotas ()
+        
         return self.data_dict ["Cases limpos"]
 
 
     def create_cases_cleaned (self) -> pd.DataFrame:
         """Executa a limpeza e retorna a base Cases limpos persistida."""
         # Clean data
-        self.cleaner.clean ()
+        new_cases = self.cleaner.clean ()
 
-        # Set approval category
-        #self.set_approval_category ()
-
-        # Reset quotas for housing
-        #self.fit_quotas ()
+        self.data_dict ["Cases limpos"] = new_cases
 
         return self.data_dict ["Cases limpos"]
 
@@ -76,7 +73,7 @@ class Analisis:
 
         # Casos de Housing
         ## Criamos filtro dos casos Housing
-        filter_eval = new_data ["approval_category"] == "Houssing"        
+        filter_eval = new_data ["approval_category"] == "Housing"        
 
         ## Calculamos a soma dos montos para cada report_reference
         group_amounts = new_data.loc [filter_eval].reset_index ()
@@ -85,9 +82,9 @@ class Analisis:
                                                                          Num_items = ('Item', 'count'))
 
         ## Filtramos os casos ultrapassão a quota
-        filter_qut = group_amounts ["Total_amount"] > group_amounts ["Quota_housing"]       
-        group_amounts = group_amounts [filter_qut]
-
+        filter_qta = group_amounts ["Total_amount"] > group_amounts ["Quota_housing"]       
+        group_amounts = group_amounts [filter_qta]
+        
         new_data ["Reset amount"] = False
         new_data ["New amount"] = np.nan
         if not group_amounts.empty:
@@ -95,7 +92,7 @@ class Analisis:
             group_amounts ["Quota_per_item"] = group_amounts ["Quota_housing"]/group_amounts ["Num_items"]
 
             ## Marcamos em "Cases limpos" as linhas que teram seus montos modificados
-            filter_qta = new_data.index.get_level_values ("report_reference") in (group_amounts.index)
+            filter_qta = new_data.index.get_level_values ("report_reference"). isin (group_amounts.index)
             new_data.loc [filter_qta, ["Reset amount"]] = True 
 
             ## Definimos os novos valores dos montos

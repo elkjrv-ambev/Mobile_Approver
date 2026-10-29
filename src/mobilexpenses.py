@@ -14,9 +14,17 @@ import time
 import sys
 import pandas as pd
 import chardet
-#import selenium.webdriver.support.expected_conditions as ec
-#from selenium.webdriver.support.wait import WebDriverWait
-#from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.actions.wheel_input import ScrollOrigin
+from selenium.webdriver.common.action_chains import ActionChains
+import selenium.webdriver.support.expected_conditions as ec
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.select import Select
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+from datetime import datetime, timedelta
+from selenium import webdriver
 import pyarrow.parquet as pq
 import pyarrow as pa
 import logging
@@ -44,37 +52,32 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
         # Setup file
         self.setup_path_file = os.path.join (SCRIPT_DIR,"Setup.xlsx")
         self.setup_df = pd.read_excel (self.setup_path_file, sheet_name = self.name_, index_col = "Parameter", engine="openpyxl")        
-        self.url_begin = self.setup_df.loc ["Url begin"].Value
+        # self.url_begin = self.setup_df.loc ["Url begin"].Value
+        self.url_begin = "https://xp1.mobilexpense.com/Home/login"
         
         # Setup webdriver
         params_funct = {"Webdriver": self.setup_path_file}
-        self.zoom_level = self.setup_df.loc ["Zoom level"].Value
-
-        # Historical base
-        #self.file_path [self.name_] = self.setup_df.loc ["Base mobilexpense path"].Value
-        #self.columns_used [self.name_] = ["ReportId", "Employee", "LOGIN", "ReportName", "GrossAmountCC", "ApprovalStatus", "ReceiptControlStatus", "ReportRef", "ReportDate"]
-        #self.index_list [self.name_] = ["Index"]
-        #self.data_df [self.name_] = pd.DataFrame (columns = self.index_list [self.name_] + self.columns_used [self.name_])
-        #self.data_df [self.name_].set_index (self.index_list [self.name_], inplace = True)
+        #self.zoom_level = self.setup_df.loc ["Zoom level"].Value
+        self.zoom_level = 50
 
         #'Open cases mobilexpences'
-        aux_name = 'Open cases mobilexpences'
-        self.file_path [aux_name] = self.setup_df.loc ['Base open cases mobilexpences path'].Value
-        self.columns_used [aux_name] = ["ReportId", "Employee", "LOGIN", "ReportName", "GrossAmountCC", "ApprovalStatus", "ReceiptControlStatus", "ReportRef", "ReportDate"]
-        self.index_list [aux_name] = ["Index"]
-        self.data_df [aux_name] = pd.DataFrame (columns = self.index_list [aux_name] + self.columns_used [aux_name])
-        self.data_df [aux_name].set_index (self.index_list [aux_name], inplace = True)
+        #aux_name = 'Open cases mobilexpences'
+        #self.file_path [aux_name] = self.setup_df.loc ['Base open cases mobilexpences path'].Value
+        #self.columns_used [aux_name] = ["ReportId", "Employee", "LOGIN", "ReportName", "GrossAmountCC", "ApprovalStatus", "ReceiptControlStatus", "ReportRef", "ReportDate"]
+        #self.index_list [aux_name] = ["Index"]
+        #self.data_df [aux_name] = pd.DataFrame (columns = self.index_list [aux_name] + self.columns_used [aux_name])
+        #self.data_df [aux_name].set_index (self.index_list [aux_name], inplace = True)
 
         #'Open cases mobilexpences'
-        aux_name = 'Casos evaluados'
-        self.file_path [aux_name] = self.setup_df.loc ['Base cases evaluated path'].Value
-        self.columns_used [aux_name] = ["report_id", "report_reference", "transaction_date", "month_year", "daycare_reference_month", "gross_amount_cc",
-                                         "net_amount", "max_daycare_amount", "customer_category", "employee_id", "policy", "has_daycare", "has_housing", 
-                                         "aprove_housing", "aprove_edv_housing", "aprove_guarderia", "aprove_km", "rules_approval", "can_be_approved",
-                                         "__insert_utc_ts", "tope_actual"]
-        self.index_list [aux_name] = [""]
-        self.data_df [aux_name] = pd.DataFrame (columns = self.index_list [aux_name] + self.columns_used [aux_name])
-        self.data_df [aux_name].set_index (self.index_list [aux_name], inplace = True)
+        #aux_name = 'Casos evaluados'
+        #self.file_path [aux_name] = self.setup_df.loc ['Base cases evaluated path'].Value
+        #self.columns_used [aux_name] = ["report_id", "report_reference", "transaction_date", "month_year", "daycare_reference_month", "gross_amount_cc",
+        #                                 "net_amount", "max_daycare_amount", "customer_category", "employee_id", "policy", "has_daycare", "has_housing", 
+        #                                 "aprove_housing", "aprove_edv_housing", "aprove_guarderia", "aprove_km", "rules_approval", "can_be_approved",
+        #                                 "__insert_utc_ts", "tope_actual"]
+        #self.index_list [aux_name] = [""]
+        #self.data_df [aux_name] = pd.DataFrame (columns = self.index_list [aux_name] + self.columns_used [aux_name])
+        #self.data_df [aux_name].set_index (self.index_list [aux_name], inplace = True)
 
         logging.basicConfig(filename=os.path.join (SCRIPT_DIR,"app.log"), 
                             filemode='a', # 'a' to append to the file, 'w' to overwrite it each time
@@ -83,6 +86,50 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
                             )
 
         super ().__init__(params_funct)
+
+    def open_driver (self):
+        # Set up Chrome options
+        #print (self.df_setup)
+        #options = webdriver.ChromeOptions()
+        options = Options ()
+        profile_dir = self.df_setup.loc ["Chrome profile directory"].values[0]
+        profile_name = self.df_setup.loc ["Chrome profile name"].values[0]
+        options.add_argument(f"--user-data-dir={profile_dir}")
+        options.add_argument(f"--profile-directory={profile_name}")
+
+        options.add_argument("--disable-notifications")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+        options.add_argument('--disable-blink-features=AutomationControlled')
+
+        prefs = {"download.default_directory": self.df_setup.loc ["Chrome download directory"].values[0],
+                 "download.prompt_for_download": False,
+                 "download.directory_upgrade": True,
+                 "safebrowsing.enabled": True}
+
+        print ("****************")
+        print (prefs)
+        print (self.df_setup)
+        print("Download dir:", repr(self.df_setup.loc ["Chrome download directory"].values[0]))
+        print ("Dir. exists: ", os.path.exists (self.df_setup.loc ["Chrome download directory"].values[0]))
+        print ("****************")
+ 
+        options.add_experimental_option("prefs", prefs)
+
+        if not self.df_setup.loc ["Show the browser"].values [0]:
+            options.add_argument("--headless=new")
+
+        # Initialize the WebDriver with the specified service and options
+        self.driver = webdriver.Chrome (options = options)
+
+        download_dir = self.df_setup.loc["Chrome download directory"].values[0]
+        self.driver.execute_cdp_cmd ("Page.setDownloadBehavior", {"behavior": "allow", "downloadPath": download_dir})
+        
+        self.driver.maximize_window ()
+
 
     def load_data_parquet (self, params_dict):
         print ("==> Carregando base ", params_dict ["Base"], " in path ",  self.file_path [params_dict ["Base"]])
@@ -530,9 +577,9 @@ class mobilexpense_obj (wdo.WebDriver_Obj):
 if __name__ == "__main__":
     try:
         mobi_t = mobilexpense_obj ()
-        mobi_t.update_base_from_excel ({"Base": "Base user request groups path", "File input": "C:/Users/99848867/Downloads/Mobile/PDD_PPI_B2B.xlsx"})
+        #mobi_t.update_base_from_excel ({"Base": "Base user request groups path", "File input": "C:/Users/99848867/Downloads/Mobile/PDD_PPI_B2B.xlsx"})
         mobi_t.dowload_cases ()
-        mobi_t.approval_kilometer ()
+        #mobi_t.approval_kilometer ()
 
     except KeyboardInterrupt:
         print("Ejecución interrumpida por el usuario.")

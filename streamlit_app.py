@@ -127,12 +127,21 @@ def main () -> None:
     st.write ("Carregue um arquivo Excel ou Parquet com os casos a tratar.")
 
     ROW = {}
+    
     # Crear fila para alocar os botões
-    ROW ["Buttons"] = st.columns (5, vertical_alignment = "bottom")
+    ROW ["Buttons"] = st.columns (5, vertical_alignment = "center")
     # Fila de status
-    ROW ["Status"] = st.columns (3, vertical_alignment = "bottom", width = "stretch")
+    ROW ["Status"] = st.columns (1, vertical_alignment = "bottom", width = "stretch")
 
-    uploaded_file = st.file_uploader ("Selecione a base Cases sem limpar", type=["xlsx", "parquet"],
+    with ROW ["Status"] [0]:
+        #st.subheader("Status dos processos")
+        # 1. Criamos o placeholder que reserva o espaço na coluna
+        with st.container (height = 70, horizontal_alignment = "center", vertical_alignment = "center"):
+            #st.subheader ("Status dos processos")
+            espaco_status = st.empty () 
+
+    with ROW ["Buttons"] [0]:
+        uploaded_file = st.file_uploader ("Selecione a base Cases sem limpar", type=["xlsx", "parquet"],
                                     help="Envie um arquivo Excel (.xlsx) ou Parquet (.parquet) contendo a base Cases sem limpar.")
     upload_error = None
     if uploaded_file is not None:
@@ -154,20 +163,22 @@ def main () -> None:
                 _read_base_file.clear ()
                 logger.info ("Arquivo enviado %s convertido e salvo como Cases_sem_limpar.parquet (%s linhas)",
                             uploaded_file.name, len (uploaded_cases))
+                espaco_status.info (f"Arquivo convertido e salvo como Cases_sem_limpar.parquet  ({len (uploaded_cases)} linhas)") 
+                
             except (ArrowException, BadZipFile, ImportError, InvalidFileException, OSError, ValueError) as error:
                 upload_error = f"Não foi possível ler ou salvar o arquivo enviado: {error}"
                 logger.exception ("Falha ao validar ou salvar o arquivo enviado")
 
     if upload_error:
-        st.error (upload_error)
+        espaco_status.error (upload_error)
 
     data_dict, load_errors, unsupported_files = _load_data_dict ()
     for error in load_errors.values ():
-        st.error (error)
+        espaco_status.error (error)
     if unsupported_files:
-        st.info (f"Arquivos em formato não suportado para visualização: {', '.join (unsupported_files)}")
+        espaco_status.info (f"Arquivos em formato não suportado para visualização: {', '.join (unsupported_files)}")
 
-    with ROW ["Buttons"] [0]:
+    with ROW ["Buttons"] [1]:
         if st.button ("Limpar dados", type="primary"):
             try:
                 input_path = BASES_DIR / "Cases_sem_limpar.parquet"
@@ -178,11 +189,10 @@ def main () -> None:
                     #cleaned_cases = analysis.create_cases_cleaned ()
                 _read_base_file.clear ()
                 data_dict ["Cases limpos"] = cleaned_cases
-                with ROW ["Status"] [1]:
-                    st.success ("A base Cases_limpos.parquet foi atualizada.")
+                espaco_status.success ("A base Cases_limpos.parquet foi atualizada.")
                 logger.info ("Limpeza concluída: %s linhas salvas em Cases_limpos.parquet", len (data_dict ["Cases limpos"]))
             except (ArrowException, ImportError, OSError, TypeError, ValueError) as error:
-                st.error (f"Não foi possível limpar a base: {error}")
+                espaco_status.error (f"Não foi possível limpar a base: {error}")
                 logger.exception ("Falha ao limpar a base Cases")
 
     display_data_dict = {
@@ -190,10 +200,10 @@ def main () -> None:
         if key.casefold () != "cases sem limpar" and not key.casefold ().startswith ("cases sem limpar (")
     }
     if not display_data_dict:
-        st.info ("Nenhuma base processada encontrada na pasta bases. Envie a planilha e execute a limpeza.")
+        espaco_status.info ("Nenhuma base processada encontrada na pasta bases. Envie a planilha e execute a limpeza.")
         return
 
-    with ROW ["Buttons"] [1]:
+    with ROW ["Buttons"] [2]:
         st.download_button ("Baixar bases processadas em Excel", data=_create_excel (display_data_dict),
                             file_name="Bases_processadas.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             type="primary", key="download_processed_bases")
@@ -224,7 +234,7 @@ def main () -> None:
                 st.metric ("Cases exibidos", f"{len (filtered_cases):,} de {len (display_cases):,}")
                 st.dataframe (filtered_cases, width="stretch", alt=f"Pré-visualização de {base_key}")
                 
-                with ROW ["Buttons"] [2]:
+                with ROW ["Buttons"] [3]:
                     st.download_button ("Baixar Cases filtrados em Excel", data=_create_excel ({base_key: filtered_cases}),
                                         file_name=f"{base_key.replace (' ', '_')}_filtrados.xlsx",
                                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
